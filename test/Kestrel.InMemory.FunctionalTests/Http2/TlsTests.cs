@@ -31,6 +31,8 @@ namespace Microsoft.AspNetCore.Server.Kestrel.InMemory.FunctionalTests.Http2
     {
         private static X509Certificate2 _x509Certificate2 = TestResources.GetTestCertificate();
 
+        private readonly Http2FrameReader _frameReader = new Http2FrameReader();
+
         [ConditionalFact]
         public async Task TlsHandshakeRejectsTlsLessThan12()
         {
@@ -92,20 +94,25 @@ namespace Microsoft.AspNetCore.Server.Kestrel.InMemory.FunctionalTests.Http2
 
         private async Task<Http2Frame> ReceiveFrameAsync(PipeReader reader)
         {
-            var frame = new Http2Frame(Http2PeerSettings.MinAllowedMaxFrameSize);
+            var frame = new Http2Frame();
 
             while (true)
             {
                 var result = await reader.ReadAsync();
                 var buffer = result.Buffer;
                 var consumed = buffer.Start;
-                var examined = buffer.End;
+                var examined = buffer.Start;
 
                 try
                 {
-                    if (Http2FrameReader.ReadFrame(buffer, frame, 16_384, out consumed, out examined))
+                    if (_frameReader.ReadFrame(buffer, frame, 16_384, out var framePayload))
                     {
+                        consumed = examined = framePayload.End;
                         return frame;
+                    }
+                    else
+                    {
+                        examined = buffer.End;
                     }
 
                     if (result.IsCompleted)
