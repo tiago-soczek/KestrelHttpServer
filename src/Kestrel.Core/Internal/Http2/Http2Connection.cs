@@ -69,7 +69,6 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
         private readonly Http2PeerSettings _serverSettings = new Http2PeerSettings();
         private readonly Http2PeerSettings _clientSettings = new Http2PeerSettings();
 
-        private readonly Http2FrameReader _frameReader = new Http2FrameReader();
         private readonly Http2Frame _incomingFrame = new Http2Frame();
 
         private Http2Stream _currentHeadersStream;
@@ -194,7 +193,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
                     {
                         if (!readableBuffer.IsEmpty)
                         {
-                            if (_frameReader.ReadFrame(readableBuffer, _incomingFrame, _serverSettings.MaxFrameSize, out var framePayload))
+                            if (Http2FrameReader.ReadFrame(readableBuffer, _incomingFrame, _serverSettings.MaxFrameSize, out var framePayload))
                             {
                                 Log.Http2FrameReceived(ConnectionId, _incomingFrame);
                                 consumed = examined = framePayload.End;
@@ -634,7 +633,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
                 var previousInitialWindowSize = (int)_clientSettings.InitialWindowSize;
                 var previousMaxFrameSize = _clientSettings.MaxFrameSize;
 
-                _clientSettings.Update(_frameReader.ReadSettings(payload));
+                _clientSettings.Update(Http2FrameReader.ReadSettings(payload));
 
                 // Ack before we update the windows, they could send data immediately.
                 var ackTask = _frameWriter.WriteSettingsAckAsync();

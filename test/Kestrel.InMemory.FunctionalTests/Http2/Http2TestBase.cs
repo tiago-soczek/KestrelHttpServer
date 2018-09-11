@@ -46,7 +46,6 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
             new KeyValuePair<string, string>("upgrade-insecure-requests", "1"),
         };
 
-        protected readonly Http2FrameReader _frameReader = new Http2FrameReader();
         private readonly MemoryPool<byte> _memoryPool = KestrelMemoryPool.Create();
         internal readonly DuplexPipe.DuplexPipePair _pair;
 
@@ -403,7 +402,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
             var padding = buffer.Slice(extendedHeaderLength + length, padLength);
             padding.Fill(0);
 
-            frame.PayloadLength = 1 + length + padLength;
+            frame.PayloadLength = extendedHeaderLength + length + padLength;
 
             if (endStream)
             {
@@ -481,7 +480,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
             frame.HeadersPriorityWeight = priority;
             frame.HeadersStreamDependency = streamDependency;
 
-            var extendedHeaderLength = 6; // stream dependency + weight
+            var extendedHeaderLength = 6; // pad length + stream dependency + weight
             var buffer = _headerEncodingBuffer.AsSpan();
             var extendedHeader = buffer.Slice(0, extendedHeaderLength);
             extendedHeader[0] = padLength;
@@ -936,7 +935,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
                 {
                     Assert.True(buffer.Length > 0);
 
-                    if (_frameReader.ReadFrame(buffer, frame, maxFrameSize, out var framePayload))
+                    if (Http2FrameReader.ReadFrame(buffer, frame, maxFrameSize, out var framePayload))
                     {
                         consumed = examined = framePayload.End;
                         frame.Payload = framePayload.ToArray();

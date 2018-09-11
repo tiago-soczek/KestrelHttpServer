@@ -2070,7 +2070,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
                 withStreamId: 0);
 
             // Only non protocol defaults are sent
-            var settings = _frameReader.ReadSettings(frame.PayloadSequence);
+            var settings = Http2FrameReader.ReadSettings(frame.PayloadSequence);
             Assert.Equal(2, settings.Count);
 
             var setting = settings[0];
@@ -2106,7 +2106,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
                 withStreamId: 0);
 
             // Only non protocol defaults are sent
-            var settings = _frameReader.ReadSettings(frame.PayloadSequence);
+            var settings = Http2FrameReader.ReadSettings(frame.PayloadSequence);
             Assert.Equal(2, settings.Count);
 
             var setting = settings[0];

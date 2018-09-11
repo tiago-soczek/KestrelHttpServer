@@ -6,10 +6,11 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http;
 
 namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
 {
-    public class Http2FrameReader
+    public static class Http2FrameReader
     {
         /* https://tools.ietf.org/html/rfc7540#section-4.1
             +-----------------------------------------------+
@@ -24,17 +25,13 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
         */
         public const int HeaderLength = 9;
 
-        private const int LengthOffset = 0;
         private const int TypeOffset = 3;
         private const int FlagsOffset = 4;
         private const int StreamIdOffset = 5;
 
         public const int SettingSize = 6; // 2 bytes for the id, 4 bytes for the value.
 
-        // No frame type needs more than 8 bytes of additional fields. Payload data beyond the known fields is not stored in this buffer.
-        private readonly byte[] _extendedHeader = new byte[HeaderLength + 8];
-
-        public bool ReadFrame(ReadOnlySequence<byte> readableBuffer, Http2Frame frame, uint maxFrameSize, out ReadOnlySequence<byte> framePayload)
+        public static bool ReadFrame(ReadOnlySequence<byte> readableBuffer, Http2Frame frame, uint maxFrameSize, out ReadOnlySequence<byte> framePayload)
         {
             framePayload = ReadOnlySequence<byte>.Empty;
 
@@ -44,9 +41,9 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
             }
 
             var headerSlice = readableBuffer.Slice(0, HeaderLength);
-            headerSlice.CopyTo(_extendedHeader);
+            var header = headerSlice.ToSpan();
 
-            var payloadLength = (int)Bitshifter.ReadUInt24BigEndian(_extendedHeader.AsSpan(LengthOffset));
+            var payloadLength = (int)Bitshifter.ReadUInt24BigEndian(header);
             if (payloadLength > maxFrameSize)
             {
                 throw new Http2ConnectionErrorException(CoreStrings.FormatHttp2ErrorFrameOverLimit(payloadLength, maxFrameSize), Http2ErrorCode.FRAME_SIZE_ERROR);
@@ -60,9 +57,9 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
             }
 
             frame.PayloadLength = payloadLength;
-            frame.Type = (Http2FrameType)_extendedHeader[TypeOffset];
-            frame.Flags = _extendedHeader[FlagsOffset];
-            frame.StreamId = (int)Bitshifter.ReadUInt31BigEndian(_extendedHeader.AsSpan(StreamIdOffset));
+            frame.Type = (Http2FrameType)header[TypeOffset];
+            frame.Flags = header[FlagsOffset];
+            frame.StreamId = (int)Bitshifter.ReadUInt31BigEndian(header.Slice(StreamIdOffset));
 
             var extendedHeaderLength = ReadExtendedFields(frame, readableBuffer);
 
@@ -72,7 +69,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
             return true;
         }
 
-        private int ReadExtendedFields(Http2Frame frame, ReadOnlySequence<byte> readableBuffer)
+        private static int ReadExtendedFields(Http2Frame frame, ReadOnlySequence<byte> readableBuffer)
         {
             // Copy in any extra fields for the given frame type
             var extendedHeaderLength = GetPayloadFieldsLength(frame);
@@ -83,8 +80,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
                     CoreStrings.FormatHttp2ErrorUnexpectedFrameLength(frame.Type, expectedLength: extendedHeaderLength), Http2ErrorCode.FRAME_SIZE_ERROR);
             }
 
-            var buffer = _extendedHeader.AsSpan(HeaderLength, extendedHeaderLength);
-            readableBuffer.Slice(HeaderLength, extendedHeaderLength).CopyTo(buffer);
+            var extendedHeaders = readableBuffer.Slice(HeaderLength, extendedHeaderLength).ToSpan();
 
             // Parse frame type specific fields
             switch (frame.Type)
@@ -99,7 +95,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
                     +---------------------------------------------------------------+
                 */
                 case Http2FrameType.DATA: // Variable 0 or 1
-                    frame.DataPadLength = frame.DataHasPadding ? buffer[0] : (byte)0;
+                    frame.DataPadLength = frame.DataHasPadding ? extendedHeaders[0] : (byte)0;
                     break;
 
                 /* https://tools.ietf.org/html/rfc7540#section-6.2
@@ -118,8 +114,8 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
                 case Http2FrameType.HEADERS:
                     if (frame.HeadersHasPadding)
                     {
-                        frame.HeadersPadLength = buffer[0];
-                        buffer = buffer.Slice(1);
+                        frame.HeadersPadLength = extendedHeaders[0];
+                        extendedHeaders = extendedHeaders.Slice(1);
                     }
                     else
                     {
@@ -128,8 +124,8 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
 
                     if (frame.HeadersHasPriority)
                     {
-                        frame.HeadersStreamDependency = (int)Bitshifter.ReadUInt31BigEndian(buffer);
-                        frame.HeadersPriorityWeight = buffer.Slice(4)[0];
+                        frame.HeadersStreamDependency = (int)Bitshifter.ReadUInt31BigEndian(extendedHeaders);
+                        frame.HeadersPriorityWeight = extendedHeaders.Slice(4)[0];
                     }
                     else
                     {
@@ -148,8 +144,8 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
                     +---------------------------------------------------------------+
                 */
                 case Http2FrameType.GOAWAY:
-                    frame.GoAwayLastStreamId = (int)Bitshifter.ReadUInt31BigEndian(buffer);
-                    frame.GoAwayErrorCode = (Http2ErrorCode)BinaryPrimitives.ReadUInt32BigEndian(buffer.Slice(4));
+                    frame.GoAwayLastStreamId = (int)Bitshifter.ReadUInt31BigEndian(extendedHeaders);
+                    frame.GoAwayErrorCode = (Http2ErrorCode)BinaryPrimitives.ReadUInt32BigEndian(extendedHeaders.Slice(4));
                     break;
 
                 /* https://tools.ietf.org/html/rfc7540#section-6.3
@@ -160,8 +156,8 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
                     +-+-------------+
                 */
                 case Http2FrameType.PRIORITY:
-                    frame.PriorityStreamDependency = (int)Bitshifter.ReadUInt31BigEndian(buffer);
-                    frame.PriorityWeight = buffer.Slice(4)[0];
+                    frame.PriorityStreamDependency = (int)Bitshifter.ReadUInt31BigEndian(extendedHeaders);
+                    frame.PriorityWeight = extendedHeaders.Slice(4)[0];
                     break;
 
                 /* https://tools.ietf.org/html/rfc7540#section-6.4
@@ -170,7 +166,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
                     +---------------------------------------------------------------+
                 */
                 case Http2FrameType.RST_STREAM:
-                    frame.RstStreamErrorCode = (Http2ErrorCode)BinaryPrimitives.ReadUInt32BigEndian(buffer);
+                    frame.RstStreamErrorCode = (Http2ErrorCode)BinaryPrimitives.ReadUInt32BigEndian(extendedHeaders);
                     break;
 
                 /* https://tools.ietf.org/html/rfc7540#section-6.9
@@ -179,7 +175,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
                     +-+-------------------------------------------------------------+
                 */
                 case Http2FrameType.WINDOW_UPDATE:
-                    frame.WindowUpdateSizeIncrement = (int)Bitshifter.ReadUInt31BigEndian(buffer);
+                    frame.WindowUpdateSizeIncrement = (int)Bitshifter.ReadUInt31BigEndian(extendedHeaders);
                     break;
 
                 case Http2FrameType.PING: // Opaque payload 8 bytes long
@@ -195,7 +191,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
 
         // The length in bytes of additional fields stored in the payload section.
         // This may be variable based on flags, but should be no more than 8 bytes.
-        public int GetPayloadFieldsLength(Http2Frame frame)
+        public static int GetPayloadFieldsLength(Http2Frame frame)
         {
             switch (frame.Type)
             {
@@ -221,9 +217,9 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
             }
         }
 
-        public IList<Http2PeerSetting> ReadSettings(ReadOnlySequence<byte> payload)
+        public static IList<Http2PeerSetting> ReadSettings(ReadOnlySequence<byte> payload)
         {
-            var data = payload.ToArray().AsSpan();
+            var data = payload.ToSpan();
             Debug.Assert(data.Length % SettingSize == 0, "Invalid settings payload length");
             var settingsCount = data.Length / SettingSize;
 
@@ -236,7 +232,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
             return settings;
         }
 
-        private Http2PeerSetting ReadSetting(Span<byte> payload)
+        private static Http2PeerSetting ReadSetting(ReadOnlySpan<byte> payload)
         {
             var id = (Http2SettingsParameter)BinaryPrimitives.ReadUInt16BigEndian(payload);
             var value = BinaryPrimitives.ReadUInt32BigEndian(payload.Slice(2));
