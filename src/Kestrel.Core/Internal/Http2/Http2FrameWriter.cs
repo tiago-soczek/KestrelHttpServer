@@ -60,8 +60,11 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
         {
             lock (_writeLock)
             {
-                _maxFrameSize = maxFrameSize;
-                _headerEncodingBuffer = new byte[_maxFrameSize];
+                if (_maxFrameSize != maxFrameSize)
+                {
+                    _maxFrameSize = maxFrameSize;
+                    _headerEncodingBuffer = new byte[_maxFrameSize];
+                }
             }
         }
 
