@@ -578,4 +578,7 @@ For more information on configuring HTTPS see https://go.microsoft.com/fwlink/?l
   <data name="ArgumentOutOfRange" xml:space="preserve">
     <value>A value between {min} and {max} is required.</value>
   </data>
+  <data name="HPackErrorDynamicTableSizeUpdateNotAtBeginningofHeaderBlock" xml:space="preserve">
+    <value>Dynamic tables size update did not occur at the beginning of the header block.</value>
+  </data>
 </root>

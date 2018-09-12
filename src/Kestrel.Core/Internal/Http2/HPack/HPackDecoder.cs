@@ -110,9 +110,20 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
 
         public void Decode(Span<byte> data, bool endHeaders, IHttpHeadersHandler handler)
         {
+            var headersObserved = false;
+
             for (var i = 0; i < data.Length; i++)
             {
-                OnByte(data[i], handler);
+                headersObserved |= OnByte(data[i], handler, out var dynamicTableUpdateParsed);
+
+                // https://tools.ietf.org/html/rfc7541#section-4.2
+                // This dynamic table size
+                // update MUST occur at the beginning of the first header block
+                // following the change to the dynamic table size.
+                if (dynamicTableUpdateParsed && headersObserved)
+                {
+                    throw new HPackDecodingException(CoreStrings.HPackErrorDynamicTableSizeUpdateNotAtBeginningofHeaderBlock);
+                }
             }
 
             if (endHeaders && _state != State.Ready)
@@ -121,8 +132,10 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
             }
         }
 
-        public void OnByte(byte b, IHttpHeadersHandler handler)
+        // Returns whether a header field has been processed
+        private bool OnByte(byte b, IHttpHeadersHandler handler, out bool dynamicTableUpdateParsed)
         {
+            dynamicTableUpdateParsed = false;
             switch (_state)
             {
                 case State.Ready:
@@ -133,6 +146,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
                         if (_integerDecoder.BeginDecode((byte)val, IndexedHeaderFieldPrefix))
                         {
                             OnIndexedHeaderField(_integerDecoder.Value, handler);
+                            return true;
                         }
                         else
                         {
@@ -197,8 +211,14 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
                     {
                         if (_integerDecoder.BeginDecode((byte)(b & ~DynamicTableSizeUpdateMask), DynamicTableSizeUpdatePrefix))
                         {
-                            // TODO: validate that it's less than what's defined via SETTINGS
+                            if (_integerDecoder.Value > _maxDynamicTableSize)
+                            {
+                                throw new HPackDecodingException(
+                                    CoreStrings.FormatHPackErrorDynamicTableSizeUpdateTooLarge(_integerDecoder.Value, _maxDynamicTableSize));
+                            }
+
                             _dynamicTable.Resize(_integerDecoder.Value);
+                            dynamicTableUpdateParsed = true;
                         }
                         else
                         {
@@ -216,6 +236,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
                     if (_integerDecoder.Decode(b))
                     {
                         OnIndexedHeaderField(_integerDecoder.Value, handler);
+                        return true;
                     }
 
                     break;
@@ -264,6 +285,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
                         if (_integerDecoder.Value == 0)
                         {
                             ProcessHeaderValue(handler);
+                            return true;
                         }
                     }
                     else
@@ -279,6 +301,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
                         if (_integerDecoder.Value == 0)
                         {
                             ProcessHeaderValue(handler);
+                            return true;
                         }
                     }
 
@@ -289,6 +312,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
                     if (_stringIndex == _stringLength)
                     {
                         ProcessHeaderValue(handler);
+                        return true;
                     }
 
                     break;
@@ -302,6 +326,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
                         }
 
                         _dynamicTable.Resize(_integerDecoder.Value);
+                        dynamicTableUpdateParsed = true;
                         _state = State.Ready;
                     }
 
@@ -310,6 +335,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
                     // Can't happen
                     throw new HPackDecodingException("The HPACK decoder reached an invalid state.");
             }
+            return false;
         }
 
         private void ProcessHeaderValue(IHttpHeadersHandler handler)

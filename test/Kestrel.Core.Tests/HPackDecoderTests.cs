@@ -376,6 +376,18 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
         }
 
         [Fact]
+        public void DecodesDynamicTableSizeUpdate_AfterIndexedHeaderStatic_Error()
+        {
+            // 001   (Dynamic Table Size Update)
+            // 11110 (30 encoded with 5-bit prefix - see http://httpwg.org/specs/rfc7541.html#integer.representation)
+
+            Assert.Equal(DynamicTableInitialMaxSize, _dynamicTable.MaxSize);
+
+            var exception = Assert.Throws<HPackDecodingException>(() => _decoder.Decode(_indexedHeaderStatic.Concat(new byte[] { 0x3e }).ToArray(), endHeaders: true, handler: this));
+            Assert.Equal(CoreStrings.HPackErrorDynamicTableSizeUpdateNotAtBeginningofHeaderBlock, exception.Message);
+        }
+
+        [Fact]
         public void DecodesDynamicTableSizeUpdate_GreaterThanLimit_Error()
         {
             // 001                     (Dynamic Table Size Update)
