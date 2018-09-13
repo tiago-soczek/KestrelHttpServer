@@ -1,6 +1,7 @@
 // Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
+using System;
 using System.Text;
 using Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack;
 using Xunit;
@@ -67,7 +68,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
         public void HuffmanDecodeArray(byte[] encoded, byte[] expected)
         {
             var dst = new byte[expected.Length];
-            Assert.Equal(expected.Length, Huffman.Decode(encoded, 0, encoded.Length, dst));
+            Assert.Equal(expected.Length, Huffman.Decode(new ReadOnlySpan<byte>(encoded, 0, encoded.Length), dst));
             Assert.Equal(expected, dst);
         }
 
@@ -87,7 +88,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
         [MemberData(nameof(_longPaddingData))]
         public void ThrowsOnPaddingLongerThanSevenBits(byte[] encoded)
         {
-            var exception = Assert.Throws<HuffmanDecodingException>(() => Huffman.Decode(encoded, 0, encoded.Length, new byte[encoded.Length * 2]));
+            var exception = Assert.Throws<HuffmanDecodingException>(() => Huffman.Decode(new ReadOnlySpan<byte>(encoded, 0, encoded.Length), new byte[encoded.Length * 2]));
             Assert.Equal(CoreStrings.HPackHuffmanErrorIncomplete, exception.Message);
         }
 
@@ -103,7 +104,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
         [MemberData(nameof(_eosData))]
         public void ThrowsOnEOS(byte[] encoded)
         {
-            var exception = Assert.Throws<HuffmanDecodingException>(() => Huffman.Decode(encoded, 0, encoded.Length, new byte[encoded.Length * 2]));
+            var exception = Assert.Throws<HuffmanDecodingException>(() => Huffman.Decode(new ReadOnlySpan<byte>(encoded, 0, encoded.Length), new byte[encoded.Length * 2]));
             Assert.Equal(CoreStrings.HPackHuffmanErrorEOS, exception.Message);
         }
 
@@ -112,7 +113,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
         {
             //                           h      e         l          l      o         *
             var encoded = new byte[] { 0b100111_00, 0b101_10100, 0b0_101000_0, 0b0111_1111 };
-            var exception = Assert.Throws<HuffmanDecodingException>(() => Huffman.Decode(encoded, 0, encoded.Length, new byte[encoded.Length]));
+            var exception = Assert.Throws<HuffmanDecodingException>(() => Huffman.Decode(new ReadOnlySpan<byte>(encoded, 0, encoded.Length), new byte[encoded.Length]));
             Assert.Equal(CoreStrings.HPackHuffmanErrorDestinationTooSmall, exception.Message);
         }
 
@@ -144,7 +145,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
         [MemberData(nameof(_incompleteSymbolData))]
         public void ThrowsOnIncompleteSymbol(byte[] encoded)
         {
-            var exception = Assert.Throws<HuffmanDecodingException>(() => Huffman.Decode(encoded, 0, encoded.Length, new byte[encoded.Length * 2]));
+            var exception = Assert.Throws<HuffmanDecodingException>(() => Huffman.Decode(new ReadOnlySpan<byte>(encoded, 0, encoded.Length), new byte[encoded.Length * 2]));
             Assert.Equal(CoreStrings.HPackHuffmanErrorIncomplete, exception.Message);
         }
 
@@ -161,7 +162,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
         [MemberData(nameof(HuffmanData))]
         public void HuffmanDecode(int code, uint encoded, int bitLength)
         {
-            Assert.Equal(code, Huffman.Decode(encoded, bitLength, out var decodedBits));
+            Assert.Equal(code, Huffman.DecodeValue(encoded, bitLength, out var decodedBits));
             Assert.Equal(bitLength, decodedBits);
         }
 
@@ -176,7 +177,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
 #pragma warning restore xUnit1026
             int bitLength)
         {
-            Assert.Equal(code, Huffman.Decode(Huffman.Encode(code).encoded, bitLength, out var decodedBits));
+            Assert.Equal(code, Huffman.DecodeValue(Huffman.Encode(code).encoded, bitLength, out var decodedBits));
             Assert.Equal(bitLength, decodedBits);
         }
 
