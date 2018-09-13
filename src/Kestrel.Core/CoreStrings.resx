@@ -575,4 +575,7 @@ For more information on configuring HTTPS see https://go.microsoft.com/fwlink/?l
   <data name="ArgumentOutOfRange" xml:space="preserve">
     <value>A value between {min} and {max} is required.</value>
   </data>
+  <data name="HPackErrorNotEnoughBuffer" xml:space="preserve">
+    <value>The given buffer was too small to encode any headers.</value>
+  </data>
 </root>

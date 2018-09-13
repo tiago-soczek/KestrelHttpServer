@@ -45,7 +45,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
                 {
                     if (length == 0 && throwIfNoneEncoded)
                     {
-                        throw new ArgumentOutOfRangeException("The given buffer was too small to encode any headers.");
+                        throw new HPackEncodingException(CoreStrings.HPackErrorNotEnoughBuffer);
                     }
                     return false;
                 }

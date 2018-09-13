@@ -2142,6 +2142,20 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core
         internal static string FormatArgumentOutOfRange(object min, object max)
             => string.Format(CultureInfo.CurrentCulture, GetString("ArgumentOutOfRange", "min", "max"), min, max);
 
+        /// <summary>
+        /// The given buffer was too small to encode any headers.
+        /// </summary>
+        internal static string HPackErrorNotEnoughBuffer
+        {
+            get => GetString("HPackErrorNotEnoughBuffer");
+        }
+
+        /// <summary>
+        /// The given buffer was too small to encode any headers.
+        /// </summary>
+        internal static string FormatHPackErrorNotEnoughBuffer()
+            => GetString("HPackErrorNotEnoughBuffer");
+
         private static string GetString(string name, params string[] formatterNames)
         {
             var value = _resourceManager.GetString(name);

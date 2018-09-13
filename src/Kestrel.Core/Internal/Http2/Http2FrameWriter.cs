@@ -129,7 +129,6 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
             }
         }
 
-        // TODO: Why doesn't this method flush? Is that because we always write a data frame afterwards (even if it's empty)?
         // Optional header fields for padding and priority are not implemented.
         /* https://tools.ietf.org/html/rfc7540#section-6.2
             +---------------+
@@ -153,33 +152,43 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
                     return;
                 }
 
-                _outgoingFrame.PrepareHeaders(Http2HeadersFrameFlags.NONE, streamId);
-                var buffer = _headerEncodingBuffer.AsSpan();
-                var done = _hpackEncoder.BeginEncode(statusCode, EnumerateHeaders(headers), buffer, out var payloadLength);
-                _outgoingFrame.PayloadLength = payloadLength;
-
-                if (done)
+                try
                 {
-                    _outgoingFrame.HeadersFlags = Http2HeadersFrameFlags.END_HEADERS;
-                }
+                    _outgoingFrame.PrepareHeaders(Http2HeadersFrameFlags.NONE, streamId);
+                    var buffer = _headerEncodingBuffer.AsSpan();
+                    var done = _hpackEncoder.BeginEncode(statusCode, EnumerateHeaders(headers), buffer, out var payloadLength);
 
-                WriteHeaderUnsynchronized();
-                _outputWriter.Write(buffer.Slice(0, payloadLength));
-
-                while (!done)
-                {
-                    _outgoingFrame.PrepareContinuation(Http2ContinuationFrameFlags.NONE, streamId);
-
-                    done = _hpackEncoder.Encode(buffer, out payloadLength);
                     _outgoingFrame.PayloadLength = payloadLength;
 
                     if (done)
                     {
-                        _outgoingFrame.ContinuationFlags = Http2ContinuationFrameFlags.END_HEADERS;
+                        _outgoingFrame.HeadersFlags = Http2HeadersFrameFlags.END_HEADERS;
                     }
 
                     WriteHeaderUnsynchronized();
                     _outputWriter.Write(buffer.Slice(0, payloadLength));
+
+                    while (!done)
+                    {
+                        _outgoingFrame.PrepareContinuation(Http2ContinuationFrameFlags.NONE, streamId);
+
+                        done = _hpackEncoder.Encode(buffer, out payloadLength);
+                        _outgoingFrame.PayloadLength = payloadLength;
+
+                        if (done)
+                        {
+                            _outgoingFrame.ContinuationFlags = Http2ContinuationFrameFlags.END_HEADERS;
+                        }
+
+                        WriteHeaderUnsynchronized();
+                        _outputWriter.Write(buffer.Slice(0, payloadLength));
+                    }
+                }
+                catch (HPackEncodingException hex)
+                {
+                    // Header errors are fatal to the connection. We don't have a direct way to signal this to the Http2Connection.
+                    _connectionContext.Abort(new ConnectionAbortedException("", hex));
+                    throw new InvalidOperationException("", hex); // Report the error to the user if this was the first write.
                 }
             }
         }
