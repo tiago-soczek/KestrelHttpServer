@@ -2313,6 +2313,42 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
         }
 
         [Fact]
+        public async Task SETTINGS_Received_ClientMaxFrameSizeCannotExceedServerMaxFrameSize()
+        {
+            var serverMaxFrame = Http2PeerSettings.MinAllowedMaxFrameSize + 1024;
+            _connection.ServerSettings.MaxFrameSize = Http2PeerSettings.MinAllowedMaxFrameSize + 1024;
+            var clientMaxFrame = serverMaxFrame + 1024 * 5;
+            _clientSettings.MaxFrameSize = (uint)clientMaxFrame;
+
+            await InitializeConnectionAsync(context =>
+            {
+                return context.Response.Body.WriteAsync(new byte[clientMaxFrame], 0, clientMaxFrame);
+            }, expectedSettingsCount: 3);
+
+            // Start request
+            await StartStreamAsync(1, _browserRequestHeaders, endStream: true);
+
+            await ExpectAsync(Http2FrameType.HEADERS,
+                withLength: 37,
+                withFlags: (byte)Http2HeadersFrameFlags.END_HEADERS,
+                withStreamId: 1);
+            await ExpectAsync(Http2FrameType.DATA,
+                withLength: serverMaxFrame,
+                withFlags: (byte)Http2DataFrameFlags.NONE,
+                withStreamId: 1);
+            await ExpectAsync(Http2FrameType.DATA,
+                withLength: clientMaxFrame - serverMaxFrame,
+                withFlags: (byte)Http2DataFrameFlags.NONE,
+                withStreamId: 1);
+            await ExpectAsync(Http2FrameType.DATA,
+                withLength: 0,
+                withFlags: (byte)Http2DataFrameFlags.END_STREAM,
+                withStreamId: 1);
+
+            await StopConnectionAsync(expectedLastStreamId: 1, ignoreNonGoAwayFrames: false);
+        }
+
+        [Fact]
         public async Task SETTINGS_Received_ChangesHeaderTableSize()
         {
             await InitializeConnectionAsync(_noopApplication);
