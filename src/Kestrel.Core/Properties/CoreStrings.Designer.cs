@@ -2157,18 +2157,18 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core
             => string.Format(CultureInfo.CurrentCulture, GetString("ArgumentOutOfRange", "min", "max"), min, max);
 
         /// <summary>
-        /// Dynamic tables size update did not occur at the beginning of the header block.
+        /// Dynamic tables size update did not occur at the beginning of the first header block.
         /// </summary>
-        internal static string HPackErrorDynamicTableSizeUpdateNotAtBeginningofHeaderBlock
+        internal static string HPackErrorDynamicTableSizeUpdateNotAtBeginningOfHeaderBlock
         {
-            get => GetString("HPackErrorDynamicTableSizeUpdateNotAtBeginningofHeaderBlock");
+            get => GetString("HPackErrorDynamicTableSizeUpdateNotAtBeginningOfHeaderBlock");
         }
 
         /// <summary>
-        /// Dynamic tables size update did not occur at the beginning of the header block.
+        /// Dynamic tables size update did not occur at the beginning of the first header block.
         /// </summary>
-        internal static string FormatHPackErrorDynamicTableSizeUpdateNotAtBeginningofHeaderBlock()
-            => GetString("HPackErrorDynamicTableSizeUpdateNotAtBeginningofHeaderBlock");
+        internal static string FormatHPackErrorDynamicTableSizeUpdateNotAtBeginningOfHeaderBlock()
+            => GetString("HPackErrorDynamicTableSizeUpdateNotAtBeginningOfHeaderBlock");
 
         private static string GetString(string name, params string[] formatterNames)
         {

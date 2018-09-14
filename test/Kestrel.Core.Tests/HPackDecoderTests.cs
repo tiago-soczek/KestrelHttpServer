@@ -384,7 +384,36 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
             Assert.Equal(DynamicTableInitialMaxSize, _dynamicTable.MaxSize);
 
             var exception = Assert.Throws<HPackDecodingException>(() => _decoder.Decode(_indexedHeaderStatic.Concat(new byte[] { 0x3e }).ToArray(), endHeaders: true, handler: this));
-            Assert.Equal(CoreStrings.HPackErrorDynamicTableSizeUpdateNotAtBeginningofHeaderBlock, exception.Message);
+            Assert.Equal(CoreStrings.HPackErrorDynamicTableSizeUpdateNotAtBeginningOfHeaderBlock, exception.Message);
+        }
+
+        [Fact]
+        public void DecodesDynamicTableSizeUpdate_AfterIndexedHeaderStatic_SubsequentDecodeCall_Error()
+        {
+            Assert.Equal(DynamicTableInitialMaxSize, _dynamicTable.MaxSize);
+
+            _decoder.Decode(_indexedHeaderStatic, endHeaders: false, handler: this);
+            Assert.Equal("GET", _decodedHeaders[HeaderNames.Method]);
+
+            // 001   (Dynamic Table Size Update)
+            // 11110 (30 encoded with 5-bit prefix - see http://httpwg.org/specs/rfc7541.html#integer.representation)
+            var exception = Assert.Throws<HPackDecodingException>(() => _decoder.Decode(new byte[] { 0x3e }, endHeaders: true, handler: this));
+            Assert.Equal(CoreStrings.HPackErrorDynamicTableSizeUpdateNotAtBeginningOfHeaderBlock, exception.Message);
+        }
+
+        [Fact]
+        public void DecodesDynamicTableSizeUpdate_AfterIndexedHeaderStatic_ResetAfterEndHeaders_Succeeds()
+        {
+            Assert.Equal(DynamicTableInitialMaxSize, _dynamicTable.MaxSize);
+
+            _decoder.Decode(_indexedHeaderStatic, endHeaders: true, handler: this);
+            Assert.Equal("GET", _decodedHeaders[HeaderNames.Method]);
+
+            // 001   (Dynamic Table Size Update)
+            // 11110 (30 encoded with 5-bit prefix - see http://httpwg.org/specs/rfc7541.html#integer.representation)
+            _decoder.Decode(new byte[] { 0x3e }, endHeaders: true, handler: this);
+
+            Assert.Equal(30, _dynamicTable.MaxSize);
         }
 
         [Fact]
