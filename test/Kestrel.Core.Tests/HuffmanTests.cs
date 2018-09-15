@@ -149,6 +149,19 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
             Assert.Equal(CoreStrings.HPackHuffmanErrorIncomplete, exception.Message);
         }
 
+        [Fact]
+        public void DecodeCharactersThatSpans5Octets()
+        {
+            var expectedLength = 2;
+            var decodedBytes = new byte[expectedLength];
+            //                           B       LF                                             EOS
+            var encoded = new byte[] { 0b1011101_1, 0b11111111, 0b11111111, 0b11111111, 0b11100_111 };
+            var decodedLength = Huffman.Decode(new ReadOnlySpan<byte>(encoded, 0, encoded.Length), decodedBytes);
+
+            Assert.Equal(expectedLength, decodedLength);
+            Assert.Equal(new byte [] { (byte)'B', (byte)'\n' }, decodedBytes);
+        }
+
         [Theory]
         [MemberData(nameof(HuffmanData))]
         public void HuffmanEncode(int code, uint expectedEncoded, int expectedBitLength)
