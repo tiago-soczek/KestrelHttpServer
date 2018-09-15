@@ -134,12 +134,12 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
                 case State.Ready:
                     if ((b & IndexedHeaderFieldMask) == IndexedHeaderFieldRepresentation)
                     {
+                        _headersObserved = true;
                         var val = b & ~IndexedHeaderFieldMask;
 
                         if (_integerDecoder.BeginDecode((byte)val, IndexedHeaderFieldPrefix))
                         {
                             OnIndexedHeaderField(_integerDecoder.Value, handler);
-                            _headersObserved = true;
                         }
                         else
                         {
@@ -148,6 +148,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
                     }
                     else if ((b & LiteralHeaderFieldWithIncrementalIndexingMask) == LiteralHeaderFieldWithIncrementalIndexingRepresentation)
                     {
+                        _headersObserved = true;
                         _index = true;
                         var val = b & ~LiteralHeaderFieldWithIncrementalIndexingMask;
 
@@ -166,6 +167,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
                     }
                     else if ((b & LiteralHeaderFieldWithoutIndexingMask) == LiteralHeaderFieldWithoutIndexingRepresentation)
                     {
+                        _headersObserved = true;
                         _index = false;
                         var val = b & ~LiteralHeaderFieldWithoutIndexingMask;
 
@@ -184,6 +186,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
                     }
                     else if ((b & LiteralHeaderFieldNeverIndexedMask) == LiteralHeaderFieldNeverIndexedRepresentation)
                     {
+                        _headersObserved = true;
                         _index = false;
                         var val = b & ~LiteralHeaderFieldNeverIndexedMask;
 
@@ -222,7 +225,6 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
                     if (_integerDecoder.Decode(b))
                     {
                         OnIndexedHeaderField(_integerDecoder.Value, handler);
-                        _headersObserved = true;
                     }
 
                     break;
@@ -271,7 +273,6 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
                         if (_integerDecoder.Value == 0)
                         {
                             ProcessHeaderValue(handler);
-                            _headersObserved = true;
                         }
                     }
                     else
@@ -287,7 +288,6 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
                         if (_integerDecoder.Value == 0)
                         {
                             ProcessHeaderValue(handler);
-                            _headersObserved = true;
                         }
                     }
 
@@ -298,7 +298,6 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack
                     if (_stringIndex == _stringLength)
                     {
                         ProcessHeaderValue(handler);
-                        _headersObserved = true;
                     }
 
                     break;
